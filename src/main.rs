@@ -1,74 +1,79 @@
-use clap::Parser;
-use clap::Subcommand;
+use std::env;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::Path;
 use walkdir::WalkDir;
 
-#[derive(Parser)]
-#[command(name = "p4mate")]
-#[command(about = "A Perforce helper tool", long_about = None)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Lift the read-only lock on the given directories or files
-    Unlock {
-        /// Directories or files to unlock
-        #[arg(required = true)]
-        paths: Vec<String>,
-    },
-}
-
 fn unlock_path(path: &Path) -> io::Result<()> {
-    #[cfg(windows)]
-    {
-        let meta = fs::metadata(path)?;
-        let mut permissions = meta.permissions();
-        // Remove the read-only attribute
-        permissions.set_readonly(false);
-        fs::set_permissions(path, permissions)?;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let meta = fs::metadata(path)?;
-        let mut permissions = meta.permissions();
-        // Add write bit for owner, group, others
-        let mode = permissions.mode();
-        let new_mode = mode | 0o222;
-        permissions.set_mode(new_mode);
-        fs::set_permissions(path, permissions)?;
+    let mut perms = fs::metadata(path)?.permissions();
+    if perms.readonly() {
+        perms.set_readonly(false);
+        fs::set_permissions(path, perms)?;
+        log::info!("Unlocked: {}", path.display());
     }
     Ok(())
 }
 
 fn unlock_recursive(path: &Path) {
+    if !path.exists() {
+        log::error!(
+            "Path does not exist, skipping: {}. Please check if the path is correct.",
+            path.display()
+        );
+        return;
+    }
+
+    log::info!("Processing path: {}", path.display());
+
     if path.is_dir() {
         for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
             let p = entry.path();
             if let Err(e) = unlock_path(p) {
-                eprintln!("Failed to unlock {}: {}", p.display(), e);
+                log::error!("Failed to unlock {}: {}. Please check file permissions or if the file is in use.", p.display(), e);
             }
         }
     } else {
         if let Err(e) = unlock_path(path) {
-            eprintln!("Failed to unlock {}: {}", path.display(), e);
+            log::error!("Failed to unlock {}: {}. Please check file permissions or if the file is in use.", path.display(), e);
         }
     }
 }
 
 fn main() {
-    let cli = Cli::parse();
-    match &cli.command {
-        Commands::Unlock { paths } => {
-            for path in paths {
-                let p = Path::new(path);
-                unlock_recursive(p);
-            }
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    let exe_path = match env::current_exe() {
+        Ok(path) => path,
+        Err(e) => {
+            log::error!("Fatal: Could not determine the application's location. Error: {}", e);
+            return;
         }
+    };
+
+    let exe_dir = match exe_path.parent() {
+        Some(dir) => dir,
+        None => {
+            log::error!("Fatal: Could not determine the application's parent directory.");
+            return;
+        }
+    };
+
+    let paths_to_unlock = [
+        "Engine/Build/Build.version",
+        "Projects/Raid/Saved",
+        "Projects/Plugins/BlockoutToolsPlugin",
+        "Projects/Plugins/ScreenSpaceFogScattering",
+    ];
+
+    log::info!("Starting file permission fix-up...");
+
+    for relative_path in &paths_to_unlock {
+        let absolute_path = exe_dir.join(relative_path);
+        unlock_recursive(&absolute_path);
     }
+
+    log::info!("All paths processed.");
+    println!("Press any key to finish...");
+    let mut stdin = io::stdin();
+    let _ = stdin.read(&mut [0u8]).unwrap();
 }
