@@ -61,8 +61,8 @@ fn main() {
     let paths_to_unlock = [
         "Engine/Build/Build.version",
         "Projects/Raid/Saved",
-        "Projects/Plugins/BlockoutToolsPlugin",
-        "Projects/Plugins/ScreenSpaceFogScattering",
+        "Projects/Raid/Plugins/BlockoutToolsPlugin",
+        "Projects/Raid/Plugins/ScreenSpaceFogScattering",
     ];
 
     log::info!("Starting file permission fix-up...");
