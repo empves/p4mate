@@ -60,6 +60,7 @@ fn main() {
 
     let paths_to_unlock = [
         "Engine/Build/Build.version",
+        "Engine/Programs",
         "Projects/Raid/Saved",
         "Projects/Raid/Plugins/BlockoutToolsPlugin",
         "Projects/Raid/Plugins/ScreenSpaceFogScattering",
