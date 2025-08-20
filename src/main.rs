@@ -39,6 +39,41 @@ fn unlock_recursive(path: &Path) {
     }
 }
 
+fn unlock_subdir_recursive(start_path: &Path, target_dir_name: &str) {
+    if !start_path.exists() {
+        log::error!(
+            "Start path does not exist: {}. Please check if the path is correct.",
+            start_path.display()
+        );
+        return;
+    }
+
+    log::info!("Searching for directories named '{}' starting from: {}", target_dir_name, start_path.display());
+
+    let mut found_count = 0;
+
+    for entry in WalkDir::new(start_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        
+        // Check if this is a directory and if its name matches our target
+        if path.is_dir() {
+            if let Some(dir_name) = path.file_name() {
+                if dir_name == target_dir_name {
+                    log::info!("Found target directory: {}", path.display());
+                    unlock_recursive(path);
+                    found_count += 1;
+                }
+            }
+        }
+    }
+
+    if found_count == 0 {
+        log::warn!("No directories named '{}' found in: {}", target_dir_name, start_path.display());
+    } else {
+        log::info!("Successfully processed {} directories named '{}'", found_count, target_dir_name);
+    }
+}
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -71,6 +106,17 @@ fn main() {
     for relative_path in &paths_to_unlock {
         let absolute_path = exe_dir.join(relative_path);
         unlock_recursive(&absolute_path);
+    }
+
+    let intermediate_parent_dirs = [
+        "Projects/Raid/Plugins"
+    ];
+
+    log::info!("Starting fixing Intermediate directories...");
+
+    for parent_dir in &intermediate_parent_dirs {
+        let absolute_path = exe_dir.join(parent_dir);
+        unlock_subdir_recursive(&absolute_path, "Intermediate");
     }
 
     log::info!("All paths processed.");
